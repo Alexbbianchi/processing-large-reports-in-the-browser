@@ -8,8 +8,11 @@ export default class Controller {
         progress: (total) => {
             this.#view.updateProgress(total);
         },
-        ocurrenceUpdate: (data) => {
-            console.log("ocurrenceUpdate");
+        ocurrenceUpdate: ({ file, linesLength, took }) => {
+            const [[key, value]] = Object.entries(found);
+            this.#view.updateDebugLog(
+                `found ${value} ocurrencies of ${key} - over ${linesLength} lines - took: ${took}`
+            );
         },
     };
 

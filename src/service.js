@@ -2,11 +2,26 @@ export default class Service {
     processFile({ query, file, onCurrenceUpdate, onProgress }) {
         const linesLength = { counter: 0 };
         const progressFn = this.#setupProgress(file.size, onProgress);
+        const statedAt = performace.now();
+        const elapsed = () =>
+            `${Math.round((performace.now() - statedAt) / 1000)} secs`;
+
+        const onUpdate = () => {
+            return (found) => {
+                onCurrenceUpdate({
+                    found,
+                    took: elapsed(),
+                    linesLength: linesLength.counter,
+                });
+            };
+        };
 
         file.stream()
             .pipeThrough(new TextDecoderStream())
             .pipeThrough(this.#csvToJson({ linesLength, progressFn }))
-            .pipeTo(this.#findOcurrencies(query, onCurrenceUpdate));
+            .pipeTo(
+                this.#findOcurrencies({ query, onCurrenceUpdate: onUpdate })
+            );
     }
 
     #csvToJson({ linesLength, progressFn }) {
@@ -41,7 +56,18 @@ export default class Service {
         const queryKeys = Object.keys(query);
         let found = {};
         return new WritableStream({
-            write(chunck) {},
+            write(jsonLine) {
+                for (const keyIndex in queryKeys) {
+                    const key = queryKeys[keyIndex];
+                    const queryValue = query[key];
+                    found[queryValue] = found[queryValue] ?? 0;
+                    if (queryValue.test(jsonLine[key])) {
+                        found[queryValue]++;
+                        onOcurrenceUpdate(found);
+                    }
+                }
+            },
+            close: () => onOcurrenceUpdate(found),
         });
     }
     #setupProgress(totalBytes, onProgress) {
