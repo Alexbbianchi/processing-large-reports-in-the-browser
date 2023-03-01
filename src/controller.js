@@ -1,30 +1,29 @@
 export default class Controller {
     #view;
+    #service;
     #worker;
     #events = {
-        alive: () => {
-            console.log("alive");
-        },
-        progress: (total) => {
-            this.#view.updateProgress(total);
-        },
-        ocurrenceUpdate: ({ file, linesLength, took }) => {
+        alive: () => {},
+        ocurrenceUpdate: ({ found, linesLength, took }) => {
             const [[key, value]] = Object.entries(found);
             this.#view.updateDebugLog(
                 `found ${value} ocurrencies of ${key} - over ${linesLength} lines - took: ${took}`
             );
         },
+        progress: ({ total }) => {
+            this.#view.updateProgress(total);
+        },
     };
 
-    constructor({ view, worker }) {
+    constructor({ view, service, worker }) {
+        this.#service = service;
         this.#view = view;
         this.#worker = this.#configureWorker(worker);
     }
 
     static init(deps) {
         const controller = new Controller(deps);
-        controller.init();
-        return controller;
+        return controller.init();
     }
 
     init() {
@@ -41,10 +40,12 @@ export default class Controller {
         return worker;
     }
 
-    #formtBytes(bytes) {
+    #formatBytes(bytes) {
         const units = ["B", "KB", "MB", "GB", "TB"];
 
-        for (var i = 0; bytes >= 1024 && i < 4; i++) {
+        let i = 0;
+
+        for (i; bytes >= 1024 && i < 4; i++) {
             bytes /= 1024;
         }
 
@@ -52,18 +53,31 @@ export default class Controller {
     }
 
     #configureOnFileChange(file) {
-        this.#view.setFileSize(this.#formtBytes(file.size));
+        const size = file.size;
+        this.#view.setFileSize(this.#formatBytes(size));
     }
 
     #configureOnFormSubmit({ description, file }) {
         const query = {};
         query["call description"] = new RegExp(description, "i");
         if (this.#view.isWorkerEnabled()) {
+            console.log("executing on worker thread!");
             this.#worker.postMessage({ query, file });
-            console.log("Executing on worker thread!");
             return;
         }
 
-        console.log("Executing on main thread!");
+        console.log("executing on main thread!");
+
+        // sem worker
+        this.#service.processFile({
+            query,
+            file,
+            onProgress: (total) => {
+                this.#events.progress({ total });
+            },
+            onOcurrenceUpdate: (...args) => {
+                this.#events.ocurrenceUpdate(...args);
+            },
+        });
     }
 }
